@@ -1,2 +1,2 @@
 # gpu-multiprocessing
-gpu並列処理no
+gpu並列処理のベースライン
