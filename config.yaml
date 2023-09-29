@@ -1,3 +1,4 @@
+seed : 5
 data_path : '/home/yishido/DATA/imagenet'
 image_size : 224
 mean : [0.485, 0.456, 0.406]
@@ -12,4 +13,5 @@ model : 'vit_tiny_patch16_224'
 num_class : 1000
 step_size : 30
 gamma : 0.1
-
+save_epoch : 10
+save_path : './output'
