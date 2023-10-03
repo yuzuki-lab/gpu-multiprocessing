@@ -15,11 +15,28 @@ import yaml
 import os
 import timm
 import random
+import wandb
+import warnings
 
 
 def main():
+    warnings.simplefilter('ignore')
+
     with open('config.yaml', 'r') as config_file:
         config = yaml.safe_load(config_file)
+    
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="test3",
+        name='not horizonflip',
+        tags=["pretrained"],
+
+        # track hyperparameters and run metadata
+        config={
+        "architecture": config['model'],
+        "dataset": "STL10",
+        "epochs": config['epoch'],
+        })
 
     device = 'cuda'
 
@@ -28,7 +45,7 @@ def main():
     cudnn.deterministic = True
     cudnn.benchmark = False
     
-    model = timm.create_model(config['model'], pretrained=False, num_classes=config['num_class']).to(device)
+    model = timm.create_model(config['model'], pretrained=True, num_classes=config['num_class']).to(device)
 
     criterion = nn.CrossEntropyLoss().to(device)
 
@@ -41,41 +58,65 @@ def main():
 
 
     
-    traindir = os.path.join(config['data_path'], 'train')
-    valdir = os.path.join(config['data_path'], 'val')
+    # traindir = os.path.join(config['data_path'], 'train')
+    # valdir = os.path.join(config['data_path'], 'val')
     normalize = transforms.Normalize(mean=config['mean'],std=config['std'])
     
-    train_dataset = datasets.ImageFolder(
-                traindir,
-                transforms.Compose([
-                transforms.RandomResizedCrop(config['image_size']),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize]))
+    # train_dataset = datasets.ImageFolder(
+    #             traindir,
+    #             transforms.Compose([
+    #             transforms.RandomResizedCrop(config['image_size']),
+    #             transforms.RandomHorizontalFlip(),
+    #             transforms.ToTensor(),
+    #             normalize]))
 
-    val_dataset = datasets.ImageFolder(
-                valdir,
-                transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(config['image_size']),
-                transforms.ToTensor(),
-                normalize,]))
+    # val_dataset = datasets.ImageFolder(
+    #             valdir,
+    #             transforms.Compose([
+    #             transforms.Resize(256),
+    #             transforms.CenterCrop(config['image_size']),
+    #             transforms.ToTensor(),
+    #             normalize,]))
+
+    # transform = transforms.Compose([transforms.ToTensor(), 
+    #                             transforms.Resize(224),
+    #                             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
+
+    train_dataset = datasets.STL10(
+        "/home/yishido/DATA",
+        download=True,
+        transform=transforms.Compose([transforms.ToTensor(), 
+                                transforms.RandomResizedCrop(config['image_size']),
+                                # transforms.RandomHorizontalFlip(),
+                                normalize]),
+        split="train"
+    )
+
+    val_dataset = datasets.STL10(
+        "/home/yishido/DATA",
+        download=True,
+        transform=transforms.Compose([transforms.ToTensor(), 
+                                transforms.Resize(256),
+                                transforms.CenterCrop(config['image_size']),
+                                normalize]),
+        split="test"
+    )
 
 
     train_loader = torch.utils.data.DataLoader(
                 train_dataset, 
                 batch_size=config['batch_size'], 
                 num_workers=config['num_workers'], 
-                pin_memory=True, 
-                sampler=train_loader)
+                pin_memory=True, )
+                # sampler=train_loader)
 
     val_loader = torch.utils.data.DataLoader(
                 val_dataset, 
                 batch_size=config['batch_size'], 
                 shuffle=False,
                 num_workers=config['num_workers'], 
-                pin_memory=True, 
-                sampler=val_loader)
+                pin_memory=True, )
+                # sampler=val_loader)
 
     print(f"Data loaded: there are {len(train_dataset)} train images.")
     print(f"Data loaded: there are {len(val_dataset)} val images.")
@@ -89,10 +130,18 @@ def main():
     for epoch in range(0,config['epoch']):
 
         train_loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, device, config)
-        val_loss, val_acc = val(val_loader, model, criterion, optimizer, epoch, device, config)
+        val_loss, val_acc = val(val_loader, model, criterion, epoch, device, config)
 
+        print("--------------------------------------------------------------------------------------------")
+        print(f"{epoch}epoch")
         print(f"Trian_Loss: {train_loss:.4f}, Train_Accuracy: {train_acc:.4f}")
         print(f"Test_Loss: {val_loss:.4f}, Test_Accuracy: {val_acc:.4f}")
+
+        wandb.log({"train_accuracy": train_acc,
+                   "train_loss": train_loss,
+                   "val_accuracy": val_acc,
+                   "val_loss" : val_loss
+                   })
 
         train_loss_list.append(train_loss)
         train_accuracy_list.append(train_acc)
@@ -104,11 +153,21 @@ def main():
             save_file = f'{save_path}/checkpoint-{epoch}.pth'
             torch.save(model, save_file)
     
-    torch.save(model, f'final')
+    torch.save(model, f'{save_path}/final.pth')
+
+    wandb.alert(
+        title='学習が完了しました。',
+        text=f'final_val_acc :{val_acc}',
+    )
+
+    wandb.finish()
 
 
 def train(train_loader, model, criterion, optimizer, epoch, device, config):
     model.train()
+
+    train_losses = 0
+    train_accuracies = 0
     
     for images, labels in train_loader:
         
@@ -122,17 +181,20 @@ def train(train_loader, model, criterion, optimizer, epoch, device, config):
         loss.backward()
         optimizer.step()
 
-        train_loss += loss.item()
+        train_losses += loss.item()
         y_pred_labels = torch.max(y_pred_prob, 1)[1]
-        train_accuracy += torch.sum(y_pred_labels == labels).item() / len(labels)
+        train_accuracies += torch.sum(y_pred_labels == labels).item() / len(labels)
 
-    epoch_train_loss = train_loss / len(train_loader)
-    epoch_train_accuracy = train_accuracy / len(train_loader)
+    epoch_train_loss = train_losses / len(train_loader)
+    epoch_train_accuracy = train_accuracies / len(train_loader)
 
     return epoch_train_loss, epoch_train_accuracy
 
 def val(val_loader, model, criterion, epoch, device, config):
     model.eval()
+
+    test_losses = 0
+    test_accuracies = 0
 
     with torch.no_grad():
         for images, labels in val_loader:
@@ -143,12 +205,12 @@ def val(val_loader, model, criterion, epoch, device, config):
             
             loss = criterion(y_pred_prob, labels)
             
-            test_loss += loss.item()
+            test_losses += loss.item()
             y_pred_labels = torch.max(y_pred_prob, 1)[1]
-            test_accuracy += torch.sum(y_pred_labels == labels).item() / len(labels)
+            test_accuracies += torch.sum(y_pred_labels == labels).item() / len(labels)
     
-    epoch_test_loss = test_loss / len(val_loader)
-    epoch_test_accuracy = test_accuracy / len(val_loader)    
+    epoch_test_loss = test_losses / len(val_loader)
+    epoch_test_accuracy = test_accuracies / len(val_loader)    
     
     return epoch_test_loss, epoch_test_accuracy
 
