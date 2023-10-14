@@ -69,50 +69,25 @@ def main():
 
 
     
-    # traindir = os.path.join(config['data_path'], 'train')
-    # valdir = os.path.join(config['data_path'], 'val')
+    traindir = os.path.join(config['data_path'], 'train')
+    valdir = os.path.join(config['data_path'], 'val')
     normalize = transforms.Normalize(mean=config['mean'],std=config['std'])
     
-    # train_dataset = datasets.ImageFolder(
-    #             traindir,
-    #             transforms.Compose([
-    #             transforms.RandomResizedCrop(config['image_size']),
-    #             transforms.RandomHorizontalFlip(),
-    #             transforms.ToTensor(),
-    #             normalize]))
+    train_dataset = datasets.ImageFolder(
+                traindir,
+                transforms.Compose([
+                transforms.RandomResizedCrop(config['image_size']),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize]))
 
-    # val_dataset = datasets.ImageFolder(
-    #             valdir,
-    #             transforms.Compose([
-    #             transforms.Resize(256),
-    #             transforms.CenterCrop(config['image_size']),
-    #             transforms.ToTensor(),
-    #             normalize,]))
-
-    # transform = transforms.Compose([transforms.ToTensor(), 
-    #                             transforms.Resize(224),
-    #                             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
-
-    train_dataset = datasets.STL10(
-        "/home/yishido/DATA",
-        download=True,
-        transform=transforms.Compose([transforms.ToTensor(), 
-                                transforms.RandomResizedCrop(config['image_size']),
-                                transforms.RandomHorizontalFlip(),
-                                normalize]),
-        split="train"
-    )
-
-    val_dataset = datasets.STL10(
-        "/home/yishido/DATA",
-        download=True,
-        transform=transforms.Compose([transforms.ToTensor(), 
-                                transforms.Resize(256),
-                                transforms.CenterCrop(config['image_size']),
-                                normalize]),
-        split="test"
-    )
-
+    val_dataset = datasets.ImageFolder(
+                valdir,
+                transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(config['image_size']),
+                transforms.ToTensor(),
+                normalize,]))
 
     train_loader = torch.utils.data.DataLoader(
                 train_dataset, 

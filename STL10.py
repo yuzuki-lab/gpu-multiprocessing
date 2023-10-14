@@ -31,6 +31,7 @@ def torch_fix_seed(config):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     torch.use_deterministic_algorithms = True
 
 
@@ -42,8 +43,8 @@ def main():
     
     wandb.init(
         # set the wandb project where this run will be logged
-        project="seed実験",
-        name='shuffle_false_1回目',
+        project="STL10_seed",
+        name='2回目',
         tags=["pretrained"],
 
         # track hyperparameters and run metadata
@@ -67,32 +68,8 @@ def main():
     
     scheduler = StepLR(optimizer, step_size=config['step_size'], gamma=config['gamma'])
 
-
-    
-    # traindir = os.path.join(config['data_path'], 'train')
-    # valdir = os.path.join(config['data_path'], 'val')
     normalize = transforms.Normalize(mean=config['mean'],std=config['std'])
     
-    # train_dataset = datasets.ImageFolder(
-    #             traindir,
-    #             transforms.Compose([
-    #             transforms.RandomResizedCrop(config['image_size']),
-    #             transforms.RandomHorizontalFlip(),
-    #             transforms.ToTensor(),
-    #             normalize]))
-
-    # val_dataset = datasets.ImageFolder(
-    #             valdir,
-    #             transforms.Compose([
-    #             transforms.Resize(256),
-    #             transforms.CenterCrop(config['image_size']),
-    #             transforms.ToTensor(),
-    #             normalize,]))
-
-    # transform = transforms.Compose([transforms.ToTensor(), 
-    #                             transforms.Resize(224),
-    #                             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
-
     train_dataset = datasets.STL10(
         "/home/yishido/DATA",
         download=True,
