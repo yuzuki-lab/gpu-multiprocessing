@@ -43,9 +43,8 @@ def main():
     
     wandb.init(
         # set the wandb project where this run will be logged
-        project="実験１",
-        name='vit_tiny',
-        
+        project="STL10",
+        name='dino',
 
         # track hyperparameters and run metadata
         config={
@@ -62,7 +61,17 @@ def main():
     # world_size = ngpus_per_node * world_size
 
     
-    model = timm.create_model(config['model'], pretrained=True, num_classes=config['num_class']).to(device)
+    model = timm.create_model(config['model'], pretrained=False, num_classes=config['num_class'])
+
+    checkpoint = "/home/yishido/dino/output_base/checkpoint.pth"
+    state_dict = torch.load(checkpoint)
+
+    state_dict = state_dict["teacher"]
+    state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+            # remove `backbone.` prefix induced by multicrop wrapper
+    state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
+    model.load_state_dict(state_dict, strict=False)
+    model.to(device)
 
     criterion = nn.CrossEntropyLoss().to(device)
 
@@ -133,8 +142,7 @@ def main():
         wandb.log({"train_accuracy": train_acc,
                    "train_loss": train_loss,
                    "val_accuracy": val_acc,
-                   "val_loss" : val_loss,
-                   "epoch" : epoch
+                   "val_loss" : val_loss
                    })
 
         train_loss_list.append(train_loss)

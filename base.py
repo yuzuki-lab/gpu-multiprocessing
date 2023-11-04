@@ -151,7 +151,8 @@ def main():
         wandb.log({"train_accuracy": train_acc,
                    "train_loss": train_loss,
                    "val_accuracy": val_acc,
-                   "val_loss" : val_loss
+                   "val_loss" : val_loss,
+                   "epoch" : epoch
                    })
 
         train_loss_list.append(train_loss)

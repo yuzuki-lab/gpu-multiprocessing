@@ -19,6 +19,7 @@ import random
 import wandb
 import warnings
 
+
 def torch_fix_seed(config):
     seed = config['seed']
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -33,13 +34,6 @@ def torch_fix_seed(config):
     torch.backends.cudnn.deterministic = True
     torch.use_deterministic_algorithms = True
 
-def setup(rank, world_size):
-    dist.init_process_group(
-        "nccl",
-        init_method="tcp://localhost:12345",
-        rank=rank,
-        world_size=world_size
-    )
 
 def main():
     warnings.simplefilter('ignore')
@@ -60,18 +54,15 @@ def main():
         "epochs": config['epoch'],
         })
 
-    device = 'cuda'
     torch_fix_seed(config)
-    # GPUデバイスを確認
-    device = torch.device("cuda")
-    rank = 0
-    world_size = 1
+    
+    if torch.cuda.is_available():
+        ngpus_per_node = torch.cuda.device_count()
+    
+    mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, config))
 
-    # 分散トレーニングのセットアップ
-    if torch.cuda.device_count() > 1:
-        rank = int(os.environ['RANK'])
-        world_size = int(os.environ['WORLD_SIZE'])
-        setup(rank, world_size)
+
+def main_worker(gpu, ngpus_per_node, config):
     
     model = timm.create_model(config['model'], pretrained=True, num_classes=config['num_class']).to(device)
     model = nn.parallel.DistributedDataParallel(model, device_ids=[rank])
@@ -85,8 +76,6 @@ def main():
     
     scheduler = StepLR(optimizer, step_size=config['step_size'], gamma=config['gamma'])
 
-
-    
     traindir = os.path.join(config['data_path'], 'train')
     valdir = os.path.join(config['data_path'], 'val')
     normalize = transforms.Normalize(mean=config['mean'],std=config['std'])
@@ -142,10 +131,10 @@ def main():
         print(f"Test_Loss: {val_loss:.4f}, Test_Accuracy: {val_acc:.4f}")
 
         wandb.log({"train_accuracy": train_acc,
-                   "train_loss": train_loss,
-                   "val_accuracy": val_acc,
-                   "val_loss" : val_loss
-                   })
+                "train_loss": train_loss,
+                "val_accuracy": val_acc,
+                "val_loss" : val_loss
+                })
 
         train_loss_list.append(train_loss)
         train_accuracy_list.append(train_acc)
@@ -193,6 +182,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device, config):
     epoch_train_accuracy = train_accuracies / len(train_loader)
 
     return epoch_train_loss, epoch_train_accuracy
+
 
 def val(val_loader, model, criterion, epoch, device, config):
     model.eval()
