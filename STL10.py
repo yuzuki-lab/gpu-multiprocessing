@@ -98,7 +98,8 @@ def main():
 
     train_loader = torch.utils.data.DataLoader(
                 train_dataset, 
-                batch_size=config['batch_size'], 
+                batch_size=config['batch_size'],
+                shuffle = True, 
                 num_workers=config['num_workers'],
                 pin_memory=True, )
                 # sampler=train_loader)

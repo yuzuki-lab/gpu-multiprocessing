@@ -19,7 +19,6 @@ import random
 import wandb
 import warnings
 
-
 def torch_fix_seed(config):
     seed = config['seed']
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -32,6 +31,7 @@ def torch_fix_seed(config):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     torch.use_deterministic_algorithms = True
 
 
@@ -43,38 +43,28 @@ def main():
     
     wandb.init(
         # set the wandb project where this run will be logged
-        project="seed実験",
-        name='shuffle_false_1回目',
-        tags=["pretrained"],
+        project="実験１",
+        name='shuffle_True',
+        
 
         # track hyperparameters and run metadata
         config={
         "architecture": config['model'],
-        "dataset": "STL10",
+        "dataset": "food101",
         "epochs": config['epoch'],
         })
 
+    device = 'cuda'
     torch_fix_seed(config)
+
+    # world_size = int(os.environ["WORLD_SIZE"])
+    # ngpus_per_node = torch.cuda.device_count()
+    # world_size = ngpus_per_node * world_size
+
     
-    if torch.cuda.is_available():
-        ngpus_per_node = torch.cuda.device_count()
-    
-    mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, config))
+    model = timm.create_model(config['model'], pretrained=True, num_classes=config['num_class']).to(device)
 
-
-def main_worker(gpu, ngpus_per_node, config):
-
-    dist_backend = 'nccl'
-    dist_url = 'tcp://224.66.41.62:23456'
-    world_size = int(os.environ["WORLD_SIZE"])
-
-    dist.init_process_group(backend=dist_backend, init_method=dist_url,
-                                world_size=world_size, rank=gpu)
-    
-    model = timm.create_model(config['model'], pretrained=True, num_classes=config['num_class']).to(gpu)
-    model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
-
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().to(device)
 
     if config['optimizer'] == "adamw":
         optimizer = torch.optim.AdamW(model.parameters())
@@ -83,29 +73,33 @@ def main_worker(gpu, ngpus_per_node, config):
     
     scheduler = StepLR(optimizer, step_size=config['step_size'], gamma=config['gamma'])
 
-    traindir = os.path.join(config['data_path'], 'train')
-    valdir = os.path.join(config['data_path'], 'val')
     normalize = transforms.Normalize(mean=config['mean'],std=config['std'])
     
-    train_dataset = datasets.ImageFolder(
-                traindir,
-                transforms.Compose([
-                transforms.RandomResizedCrop(config['image_size']),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize]))
+    train_dataset = datasets.Food101(
+        "/home/yishido/DATA",
+        download=False,
+        transform=transforms.Compose([transforms.ToTensor(), 
+                                transforms.RandomResizedCrop(config['image_size']),
+                                transforms.RandomHorizontalFlip(),
+                                normalize]),
+        split="train"
+    )
 
-    val_dataset = datasets.ImageFolder(
-                valdir,
-                transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(config['image_size']),
-                transforms.ToTensor(),
-                normalize,]))
+    val_dataset = datasets.Food101(
+        "/home/yishido/DATA",
+        download=False,
+        transform=transforms.Compose([transforms.ToTensor(), 
+                                transforms.Resize(256),
+                                transforms.CenterCrop(config['image_size']),
+                                normalize]),
+        split="test"
+    )
+
 
     train_loader = torch.utils.data.DataLoader(
                 train_dataset, 
-                batch_size=config['batch_size'], 
+                batch_size=config['batch_size'],
+                shuffle=True, 
                 num_workers=config['num_workers'],
                 pin_memory=True, )
                 # sampler=train_loader)
@@ -138,10 +132,11 @@ def main_worker(gpu, ngpus_per_node, config):
         print(f"Test_Loss: {val_loss:.4f}, Test_Accuracy: {val_acc:.4f}")
 
         wandb.log({"train_accuracy": train_acc,
-                "train_loss": train_loss,
-                "val_accuracy": val_acc,
-                "val_loss" : val_loss
-                })
+                   "train_loss": train_loss,
+                   "val_accuracy": val_acc,
+                   "val_loss" : val_loss,
+                   "epoch" : epoch
+                   })
 
         train_loss_list.append(train_loss)
         train_accuracy_list.append(train_acc)
@@ -189,7 +184,6 @@ def train(train_loader, model, criterion, optimizer, epoch, device, config):
     epoch_train_accuracy = train_accuracies / len(train_loader)
 
     return epoch_train_loss, epoch_train_accuracy
-
 
 def val(val_loader, model, criterion, epoch, device, config):
     model.eval()

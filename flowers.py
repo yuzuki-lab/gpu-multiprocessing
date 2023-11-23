@@ -121,15 +121,15 @@ def main():
     val_dataset = CustomDataset(
         val_data,
         transform=transforms.Compose([transforms.ToTensor(), 
-                                transforms.RandomResizedCrop(224),
-                                transforms.RandomHorizontalFlip(),
+                                transforms.Resize(256),
+                                transforms.CenterCrop(config['image_size']),
                                 normalize]),
     )
 
-
     train_loader = torch.utils.data.DataLoader(
                 train_dataset, 
-                batch_size=config['batch_size'], 
+                batch_size=config['batch_size'],
+                shuffle=True, 
                 num_workers=config['num_workers'],
                 pin_memory=True, )
                 # sampler=train_loader)
