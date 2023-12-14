@@ -1,4 +1,3 @@
 # gpu-multiprocessing
-gpu並列処理のベースライン
-ViTを用いたImagenetの教師あり学習をベース
-gpu並列処理の勉強のため、それ以外の細かな設定やエラー処理は除く。
+gpu並列処理のためのベースライン<br>
+wandmを使って管理したい
